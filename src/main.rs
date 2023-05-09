@@ -1,32 +1,40 @@
 use std::env;
-use std::time::Duration;
 use dyndns::api;
 
 fn main() {
-    dotenv::dotenv().unwrap();
     let name = env::args().nth(1).expect("Must provide record name");
 
-    loop {
-        let mut failed = true;
-
-        if let Ok(ip) = api::get_ip() {
-            if let Ok(rec) = api::get_record(&name) {
-                if rec.content != ip {
-                    
-                } else {
-                    failed = false;
-                }
-            }
+    let ip = match api::get_ip() {
+        Ok(ip) => {
+            eprintln!("IP Address is {}", ip);
+            ip
         }
+        Err(e) => {
+            eprintln!("Failed to get IP: {}", e);
+            std::process::exit(1);
+        }
+    };
 
-        let sleep_dur = if failed {
-            // 5 seconds
-            Duration::from_secs(5)
-        } else {
-            // 5 minutes
-            Duration::from_secs(5 * 60)
-        };
+    let mut rec = match api::get_record(&name) {
+        Ok(rec) => {
+            eprintln!("DNS Says {}", rec.content);
+            rec
+        }
+        Err(e) => {
+            eprintln!("Failed to query DNS: {}", e);
+            std::process::exit(1);
+        }
+    };
 
-        std::thread::sleep(sleep_dur);
+    if rec.content != ip {
+        eprintln!("Updating DNS Record...");
+        rec.content = ip;
+
+        match api::set_record(rec) {
+            Ok(_) => eprintln!("Success!"),
+            Err(e) => eprintln!("Failed: {e}")
+        }
+    } else {
+        eprintln!("No Change");
     }
 }
